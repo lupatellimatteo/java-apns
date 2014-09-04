@@ -1,20 +1,17 @@
 package com.notnoop.apns.internal;
 
+import java.io.ByteArrayOutputStream;
+import javax.net.SocketFactory;
+import com.notnoop.apns.SimpleApnsNotification;
+import org.junit.Assert;
+import org.junit.Ignore;
+import org.junit.Test;
 import static com.notnoop.apns.internal.MockingUtils.*;
 
-import java.io.ByteArrayOutputStream;
 
-import javax.net.SocketFactory;
-
-import org.junit.Assert;
-import org.junit.Test;
-import org.junit.Ignore;
-
-import com.notnoop.apns.SimpleApnsNotification;
-
-
+@SuppressWarnings("deprecation")
 public class ApnsConnectionTest {
-    SimpleApnsNotification msg = new SimpleApnsNotification ("a87d8878d878a79", "{\"aps\":{}}");
+    private SimpleApnsNotification msg = new SimpleApnsNotification ("a87d8878d878a79", "{\"aps\":{}}");
 
     @Test
     public void simpleSocket() {

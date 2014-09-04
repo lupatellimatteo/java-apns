@@ -2,6 +2,7 @@ package com.notnoop.apns.internal;
 
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
@@ -10,8 +11,12 @@ import java.util.concurrent.TimeUnit;
 
 import com.notnoop.apns.ApnsNotification;
 import com.notnoop.exceptions.NetworkIOException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class BatchApnsService extends AbstractApnsService {
+
+    private static final Logger logger = LoggerFactory.getLogger(BatchApnsService.class);
 
 	/**
 	 * How many seconds to wait for more messages before batch is send.
@@ -36,14 +41,14 @@ public class BatchApnsService extends AbstractApnsService {
 	private ScheduledExecutorService scheduleService;
 	private ScheduledFuture<?> taskFuture;
 	
-	private Runnable batchRunner = new SendMessagessBatch();
+	private Runnable batchRunner = new SendMessagesBatch();
 
 	public BatchApnsService(ApnsConnection prototype, ApnsFeedbackConnection feedback, int batchWaitTimeInSec, int maxBachWaitTimeInSec, ThreadFactory tf) {
 		super(feedback);
 		this.prototype = prototype;
 		this.batchWaitTimeInSec = batchWaitTimeInSec;
 		this.maxBatchWaitTimeInSec = maxBachWaitTimeInSec;
-		this.scheduleService = new ScheduledThreadPoolExecutor(1, tf);
+		this.scheduleService = new ScheduledThreadPoolExecutor(1, tf == null ? Executors.defaultThreadFactory() : tf);
 	}
 
 	public void start() {
@@ -68,9 +73,9 @@ public class BatchApnsService extends AbstractApnsService {
 			firstMessageArrivedTime = System.nanoTime();
 		}
 		
-		long sincFirstMessageSec = (System.nanoTime() - firstMessageArrivedTime) / 1000 / 1000 / 1000;
+		long sinceFirstMessageSec = (System.nanoTime() - firstMessageArrivedTime) / 1000 / 1000 / 1000;
 		
-		if (taskFuture != null && sincFirstMessageSec < maxBatchWaitTimeInSec) {
+		if (taskFuture != null && sinceFirstMessageSec < maxBatchWaitTimeInSec) {
 			taskFuture.cancel(false);
 		}
 		
@@ -81,17 +86,17 @@ public class BatchApnsService extends AbstractApnsService {
 		}
 	}
 
-	class SendMessagessBatch implements Runnable {
+	class SendMessagesBatch implements Runnable {
 		public void run() {
 			ApnsConnection newConnection = prototype.copy();
 			try {
-				ApnsNotification msg = null;
+				ApnsNotification msg;
 				while ((msg = batch.poll()) != null) {
 					try {
 						newConnection.sendMessage(msg);
 					} catch (NetworkIOException e) {
-						continue;
-					}
+                        logger.warn("Network exception sending message msg "+ msg.getIdentifier(), e);
+                    }
 				}
 			} finally {
 				Utilities.close(newConnection);

@@ -1,4 +1,14 @@
-Build status: [![Build Status](https://travis-ci.org/notnoop/java-apns.png)](https://travis-ci.org/notnoop/java-apns)
+Build status:
+
+   * Main fork [![Build Status](https://travis-ci.org/notnoop/java-apns.png)](https://travis-ci.org/notnoop/java-apns)
+   * Development [![Build Status](https://travis-ci.org/java-apns/java-apns.png)](https://travis-ci.org/java-apns/java-apns)
+
+Development - Version 1.0.0
+---------------------------
+There currently is a perelease for 1.0.0 which fixes a number of problems over 0.2.3. However there's still
+a CI test that sporadically fails, so 1.0.0 is NOT meant for production, yet. Further development for
+1.0.0 happens on [java-apns/java-apns] (https://github.com/java-apns/java-apns)
+
 
 Introduction
 ------------
@@ -20,7 +30,7 @@ Features:
   *  Easy to use, high performance APNS Service API
   *  Supports Apple Feedback service
   *  Support Enhanced Apple Push Notification
-  *  Support MDM and Newstand Notifications
+  *  Support MDM and Newsstand Notifications
   *  Easy to use with Apple certificates
   *  Easy to extend and reuse
   *  Easy to integrate with dependency injection frameworks
@@ -76,7 +86,7 @@ localizable alert:
 Enhanced Notification Format
 ----------------
 
-You can use the enhanced notification format to get feetback from Apple about notifications that were unable to be processed.
+You can use the enhanced notification format to get feedback from Apple about notifications that were unable to be processed.
 
      String payload = APNS.newPayload()
                 .badge(3)
@@ -85,13 +95,51 @@ You can use the enhanced notification format to get feetback from Apple about no
                 .localizedArguments("Jenna", "Frank")
                 .actionKey("Play").build();
 
+     int now =  (int)(new Date().getTime()/1000);
+
      EnhancedApnsNotification notification = new EnhancedApnsNotification(EnhancedApnsNotification.INCREMENT_ID() /* Next ID */,
-         new Date().getTime() + 60 * 60 /* Expire in one hour */,
+         now + 60 * 60 /* Expire in one hour */,
          token /* Device Token */,
          payload);
 
      service.push(notification);
+     
+If you want to use enhanced notifications for error handling, you first have to write a adapter class that implements ApnsDelegate. 
+Within the messageSendFailed method you then may implement your custom code, for example:
 
+     @Override
+     public void messageSendFailed(ApnsNotification message, Throwable e)
+     {
+          System.err.println("MessageSendFailed: " + e.getMessage());
+     }
+
+Next you may instantiate your custom delegate and submit it to your push notification using the withDelegate method of the ApnsServiceBuilder. A very basic example may look like this:
+
+     public void pushMessage(List<String> receivers, String message, String certificatePath, String certificatePass)
+     {
+          // create a new delagate
+          ApnsDelegate delagate = new CustomApnsDelegate();
+     
+          // build a new apns service and submit the created delagate to it
+          ApnsService service = APNS.newService().withCert(certificatePath, certpass).withSandboxDestination().withDelegate(delagate).build();
+     
+          // compose your push notification
+          String payload = APNS.newPayload().alertBody(message).badge(1).noActionButton().build();
+     
+          // push the notification
+          try
+          {
+               System.out.println("Pushing notification.");
+               service.push(receivers, payload);
+          }
+          catch(Exception e)
+          {
+               //TODO error handling
+               System.out.println("Push failed.");
+          }
+     }
+      
+When an error occures while delivering your message, APNS will return an error code before closing the socket. This error code will be received by your ApnsDelegate adapter class where the messageSendFailed method will be called. Also an exception on the ApnsService.push method will be risen.
 
 License
 ----------------

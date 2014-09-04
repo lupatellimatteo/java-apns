@@ -1,19 +1,17 @@
 package com.notnoop.apns.integration;
 
-import static com.notnoop.apns.utils.FixedCertificates.*;
-
 import java.io.IOException;
-
+import java.net.SocketTimeoutException;
 import javax.net.ssl.SSLContext;
-
+import com.notnoop.apns.APNS;
+import com.notnoop.apns.ApnsService;
+import com.notnoop.apns.utils.ApnsServerStub;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
-
-import com.notnoop.apns.APNS;
-import com.notnoop.apns.ApnsService;
 import static com.notnoop.apns.internal.ApnsFeedbackParsingUtils.*;
-import com.notnoop.apns.utils.ApnsServerStub;
+import static com.notnoop.apns.utils.FixedCertificates.*;
+import static org.junit.Assert.*;
 
 public class FeedbackTest {
 
@@ -23,7 +21,7 @@ public class FeedbackTest {
 
     @Before
     public void startup() {
-        server = ApnsServerStub.prepareAndStartServer(TEST_GATEWAY_PORT, TEST_FEEDBACK_PORT);
+        server = ApnsServerStub.prepareAndStartServer();
     }
 
     @After
@@ -34,25 +32,59 @@ public class FeedbackTest {
 
     @Test
     public void simpleFeedback() throws IOException {
-        server.toSend.write(simple);
+        server.getToSend().write(simple);
 
         ApnsService service =
             APNS.newService().withSSLContext(clientContext)
-            .withGatewayDestination(TEST_HOST, TEST_GATEWAY_PORT)
-            .withFeedbackDestination(TEST_HOST, TEST_FEEDBACK_PORT)
+            .withGatewayDestination(LOCALHOST, server.getEffectiveGatewayPort())
+            .withFeedbackDestination(LOCALHOST, server.getEffectiveFeedbackPort())
+            .build();
+
+        checkParsedSimple(service.getInactiveDevices());
+    }
+    
+    @Test
+    public void simpleFeedbackWithoutTimeout() throws IOException {
+        server.getToSend().write(simple);
+        server.getToWaitBeforeSend().set(2000);
+        ApnsService service =
+            APNS.newService().withSSLContext(clientContext)
+            .withGatewayDestination(LOCALHOST, server.getEffectiveGatewayPort())
+            .withFeedbackDestination(LOCALHOST, server.getEffectiveFeedbackPort())
+            .withReadTimeout(3000)
             .build();
 
         checkParsedSimple(service.getInactiveDevices());
     }
 
+    @Test()
+    public void simpleFeedbackWithTimeout() throws IOException {
+        server.getToSend().write(simple);
+        server.getToWaitBeforeSend().set(5000);
+        ApnsService service =
+            APNS.newService().withSSLContext(clientContext)
+            .withGatewayDestination(LOCALHOST, server.getEffectiveGatewayPort())
+            .withFeedbackDestination(LOCALHOST, server.getEffectiveFeedbackPort())
+            .withReadTimeout(1000)
+            .build();
+        try {
+            service.getInactiveDevices();
+            fail("RuntimeException expected");
+        }
+        catch(RuntimeException e) {
+            assertEquals("Socket timeout exception expected", 
+                    SocketTimeoutException.class, e.getCause().getClass() );
+        }
+    }
+
     @Test
     public void threeFeedback() throws IOException {
-        server.toSend.write(three);
+        server.getToSend().write(three);
 
         ApnsService service =
             APNS.newService().withSSLContext(clientContext)
-            .withGatewayDestination(TEST_HOST, TEST_GATEWAY_PORT)
-            .withFeedbackDestination(TEST_HOST, TEST_FEEDBACK_PORT)
+            .withGatewayDestination(LOCALHOST, server.getEffectiveGatewayPort())
+            .withFeedbackDestination(LOCALHOST, server.getEffectiveFeedbackPort())
             .build();
 
         checkParsedThree(service.getInactiveDevices());
@@ -60,12 +92,12 @@ public class FeedbackTest {
 
     @Test
     public void simpleQueuedFeedback() throws IOException {
-        server.toSend.write(simple);
+        server.getToSend().write(simple);
 
         ApnsService service =
             APNS.newService().withSSLContext(clientContext)
-            .withGatewayDestination(TEST_HOST, TEST_GATEWAY_PORT)
-            .withFeedbackDestination(TEST_HOST, TEST_FEEDBACK_PORT)
+            .withGatewayDestination(LOCALHOST, server.getEffectiveGatewayPort())
+            .withFeedbackDestination(LOCALHOST, server.getEffectiveFeedbackPort())
             .asQueued()
             .build();
 
@@ -74,12 +106,12 @@ public class FeedbackTest {
 
     @Test
     public void threeQueuedFeedback() throws IOException {
-        server.toSend.write(three);
+        server.getToSend().write(three);
 
         ApnsService service =
             APNS.newService().withSSLContext(clientContext)
-            .withGatewayDestination(TEST_HOST, TEST_GATEWAY_PORT)
-            .withFeedbackDestination(TEST_HOST, TEST_FEEDBACK_PORT)
+            .withGatewayDestination(LOCALHOST, server.getEffectiveGatewayPort())
+            .withFeedbackDestination(LOCALHOST, server.getEffectiveFeedbackPort())
             .asQueued()
             .build();
 

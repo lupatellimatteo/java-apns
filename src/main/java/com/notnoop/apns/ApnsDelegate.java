@@ -43,7 +43,7 @@ public interface ApnsDelegate {
      * Called when message was successfully sent to the Apple servers
      *
      * @param message the notification that was sent
-     * @param resent whether the notfication was resent after an error
+     * @param resent whether the notification was resent after an error
      */
     public void messageSent(ApnsNotification message, boolean resent);
 
@@ -61,14 +61,32 @@ public interface ApnsDelegate {
      */
     public void messageSendFailed(ApnsNotification message, Throwable e);
 
+    /**
+     * The connection was closed and/or an error packet was received while
+     * monitoring was turned on.
+     *
+     * @param e the delivery error
+     * @param messageIdentifier  id of the message that failed
+     */
     public void connectionClosed(DeliveryError e, int messageIdentifier);
 
+    /**
+     * The resend cache needed a bigger size (while resending messages)
+     *
+     * @param newCacheLength new size of the resend cache.
+     */
     public void cacheLengthExceeded(int newCacheLength);
-    
+
+    /**
+     * A number of notifications has been queued for resending due to a error-response
+     * packet being received.
+     *
+     * @param resendCount the number of messages being queued for resend
+     */
     public void notificationsResent(int resendCount);
     
     /**
-     * A NOOP delegate that does nothing!
+     * A no operation delegate that does nothing!
      */
     public final static ApnsDelegate EMPTY = new ApnsDelegateAdapter();
 }

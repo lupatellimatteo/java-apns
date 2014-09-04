@@ -39,6 +39,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
 import java.net.Socket;
+import java.security.GeneralSecurityException;
 import java.security.KeyStore;
 import java.util.Date;
 import java.util.HashMap;
@@ -48,10 +49,10 @@ import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManagerFactory;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import com.notnoop.exceptions.InvalidSSLConfig;
 import com.notnoop.exceptions.NetworkIOException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public final class Utilities {
     private static Logger logger = LoggerFactory.getLogger(Utilities.class);
@@ -68,7 +69,7 @@ public final class Utilities {
     public static final String PRODUCTION_FEEDBACK_HOST = "feedback.push.apple.com";
     public static final int PRODUCTION_FEEDBACK_PORT = 2196;
 
-    public static final int MAX_PAYLOAD_LENGTH = 256;
+    public static final int MAX_PAYLOAD_LENGTH = 2048;
 
     private Utilities() { throw new AssertionError("Uninstantiable class"); }
 
@@ -102,10 +103,10 @@ public final class Utilities {
                tmf.init((KeyStore)null);
 
                // Get the SSLContext to help create SSLSocketFactory
-               final SSLContext sslc = SSLContext.getInstance("TLS");
-               sslc.init(kmf.getKeyManagers(), tmf.getTrustManagers(), null);
-               return sslc;
-           } catch (final Exception e) {
+               final SSLContext sslContext = SSLContext.getInstance("TLS");
+               sslContext.init(kmf.getKeyManagers(), tmf.getTrustManagers(), null);
+               return sslContext;
+           } catch (final GeneralSecurityException e) {
                throw new InvalidSSLConfig(e);
            }
        }
@@ -116,12 +117,12 @@ public final class Utilities {
 
         final byte[] bts = new byte[hex.length() / 2];
         for (int i = 0; i < bts.length; i++) {
-            bts[i] = (byte) (charval(hex.charAt(2*i)) * 16 + charval(hex.charAt(2*i + 1)));
+            bts[i] = (byte) (charVal(hex.charAt(2 * i)) * 16 + charVal(hex.charAt(2 * i + 1)));
         }
         return bts;
     }
 
-    private static int charval(final char a) {
+    private static int charVal(final char a) {
         if ('0' <= a && a <= '9') {
             return (a - '0');
         } else if ('a' <= a && a <= 'f') {
@@ -230,6 +231,8 @@ public final class Utilities {
     }
 
     public static void close(final Closeable closeable) {
+        logger.debug("close {}", closeable);
+
         try {
             if (closeable != null) {
                 closeable.close();
@@ -240,6 +243,8 @@ public final class Utilities {
     }
 
     public static void close(final Socket closeable) {
+        logger.debug("close {}", closeable);
+
         try {
             if (closeable != null) {
                 closeable.close();
@@ -252,7 +257,9 @@ public final class Utilities {
     public static void sleep(final int delay) {
         try {
             Thread.sleep(delay);
-        } catch (final InterruptedException e1) {}
+        } catch (final InterruptedException e1) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     public static byte[] copyOf(final byte[] bytes) {
@@ -284,6 +291,7 @@ public final class Utilities {
         }
     }
 
+    @SuppressWarnings({"PointlessArithmeticExpression", "PointlessBitwiseExpression"})
     public static int parseBytes(final int b1, final int b2, final int b3, final int b4) {
         return  ((b1 << 3 * 8) & 0xFF000000)
               | ((b2 << 2 * 8) & 0x00FF0000)

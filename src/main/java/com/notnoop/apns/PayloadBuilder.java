@@ -70,6 +70,44 @@ public final class PayloadBuilder {
     }
 
     /**
+     * Sets the alert title text, the text the appears to the user,
+     * to the passed value
+     *
+     * @param title the text to appear to the user
+     * @return  this
+     */
+    public PayloadBuilder alertTitle(final String title) {
+        customAlert.put("title", title);
+        return this;
+    }
+
+    /**
+     * Sets the alert action text
+     *
+     * @param action The label of the action button
+     * @return  this
+     */
+    public PayloadBuilder alertAction(final String action) {
+        customAlert.put("action", action);
+        return this;
+    }
+
+    /**
+     * Sets the "url-args" key that are paired with the placeholders
+     * inside the urlFormatString value of your website.json file.
+     * The order of the placeholders in the URL format string determines
+     * the order of the values supplied by the url-args array.
+     *
+     * @param urlArgs the values to be paired with the placeholders inside
+     *                the urlFormatString value of your website.json file.
+     * @return  this
+     */
+    public PayloadBuilder urlArgs(final String... urlArgs){
+        aps.put("url-args", urlArgs);
+        return this;
+    }
+
+    /**
      * Sets the alert sound to be played.
      *
      * Passing {@code null} disables the notification sound.
@@ -83,6 +121,25 @@ public final class PayloadBuilder {
             aps.put("sound", sound);
         } else {
             aps.remove("sound");
+        }
+        return this;
+    }
+
+    /**
+     * Sets the category of the notification for iOS8 notification
+     * actions.  See 13 minutes into "What's new in iOS Notifications"
+     *
+     * Passing {@code null} removes the category.
+     *
+     * @param category the name of the category supplied to the app
+     *              when receiving the notification
+     * @return  this
+     */
+    public PayloadBuilder category(final String category) {
+        if (category != null) {
+            aps.put("category", category);
+        } else {
+            aps.remove("category");
         }
         return this;
     }
@@ -154,6 +211,19 @@ public final class PayloadBuilder {
      * @return this
      */
     public PayloadBuilder forNewsstand() {
+        aps.put("content-available", 1);
+        return this;
+    }
+
+    /**
+     * With iOS7 it is possible to have the application wake up before the user opens the app.
+     * 
+     * The same key-word can also be used to send 'silent' notifications. With these 'silent' notification 
+     * a different app delegate is being invoked, allowing the app to perform background tasks.
+     *
+     * @return this
+     */
+    public PayloadBuilder instantDeliveryOrSilentNotification() {
         aps.put("content-available", 1);
         return this;
     }
@@ -238,10 +308,10 @@ public final class PayloadBuilder {
      * payload, and subsequent calls add but doesn't reset the
      * custom fields.
      *
-     * @param map   the custom map
+     * @param values   the custom map
      * @return  this
      */
-    public PayloadBuilder customFields(final Map<String, ? extends Object> values) {
+    public PayloadBuilder customFields(final Map<String, ?> values) {
         root.putAll(values);
         return this;
     }
@@ -257,7 +327,7 @@ public final class PayloadBuilder {
 
     /**
      * Returns true if the payload built so far is larger than
-     * the size permitted by Apple (which is 256 bytes).
+     * the size permitted by Apple (which is 2048 bytes).
      *
      * @return true if the result payload is too long
      */
@@ -325,7 +395,7 @@ public final class PayloadBuilder {
 
     /**
      * Shrinks the alert message body so that the resulting payload
-     * message fits within require Apple specification (256 bytes).
+     * message fits within require Apple specification (2048 bytes).
      *
      * This method performs best-effort approach, and its behavior
      * is unspecified when handling alerts where the payload
@@ -340,7 +410,7 @@ public final class PayloadBuilder {
 
     /**
      * Shrinks the alert message body so that the resulting payload
-     * message fits within require Apple specification (256 bytes).
+     * message fits within require Apple specification (2048 bytes).
      *
      * This method performs best-effort approach, and its behavior
      * is unspecified when handling alerts where the payload

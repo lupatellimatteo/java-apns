@@ -33,11 +33,24 @@ package com.notnoop.apns;
 import java.util.Arrays;
 
 import com.notnoop.apns.internal.Utilities;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
 
 /**
- * Represents an APNS notification to be sent to Apple service.
+ * Represents an APNS notification to be sent to Apple service. This is for legacy use only
+ * and should not be used in new development.
+ * https://developer.apple.com/library/ios/documentation/NetworkingInternet/Conceptual/RemoteNotificationsPG/Chapters/LegacyFormat.html
+ *
+ * This SimpleApnsNotification also only has limited error handling (by the APNS closing the connection
+ * when a bad message was received) This prevents us from location the malformed notification.
+ *
+ * As push messages sent after a malformed notification are discarded by APNS messages will get lost
+ * and not be delivered with the SimpleApnsNotification.
+ *
+ * @deprecated use EnhancedApnsNotification instead.
  */
+@SuppressWarnings("deprecation")
+@Deprecated
 public class SimpleApnsNotification implements ApnsNotification {
 
     private final static byte COMMAND = 0;
@@ -95,7 +108,7 @@ public class SimpleApnsNotification implements ApnsNotification {
     public byte[] marshall() {
         if (marshall == null)
             marshall = Utilities.marshall(COMMAND, deviceToken, payload);
-        return marshall;
+        return marshall.clone();
     }
 
     /**
@@ -107,7 +120,8 @@ public class SimpleApnsNotification implements ApnsNotification {
      */
     public int length() {
         int length = 1 + 2 + deviceToken.length + 2 + payload.length;
-        assert marshall().length == length;
+        final int marshalledLength = marshall().length;
+        assert marshalledLength == length;
         return length;
     }
 
@@ -136,11 +150,16 @@ public class SimpleApnsNotification implements ApnsNotification {
     }
     
     @Override
+    @SuppressFBWarnings("DE_MIGHT_IGNORE")
     public String toString() {
-        String payloadString = "???";
+        String payloadString;
         try {
             payloadString = new String(payload, "UTF-8");
-        } catch (Exception _) {}        
+        } catch (Exception ex) {
+            payloadString = "???";
+        }
         return "Message(Token="+Utilities.encodeHex(deviceToken)+"; Payload="+payloadString+")";
     }
+
+
 }

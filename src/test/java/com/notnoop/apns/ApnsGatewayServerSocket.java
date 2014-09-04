@@ -5,16 +5,15 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
 import java.net.Socket;
 import java.util.concurrent.ExecutorService;
-
 import javax.net.ssl.SSLContext;
 
 /**
  * Represents the Apple APNS server. This allows testing outside of the Apple
  * servers.
  */
+@SuppressWarnings("deprecation")
 public class ApnsGatewayServerSocket extends AbstractApnsServerSocket {
 	private final ApnsServerService apnsServerService;
 
@@ -64,7 +63,7 @@ public class ApnsGatewayServerSocket extends AbstractApnsServerSocket {
 			} catch (IOException ioe) {
 				writeResponse(socket, identifier, 8, 1);
 				break;
-			} catch (Exception expt) {
+			} catch (Exception e) {
 				writeResponse(socket, identifier, 8, 1);
 				break;
 			}
@@ -89,7 +88,8 @@ public class ApnsGatewayServerSocket extends AbstractApnsServerSocket {
 	private byte[] toArray(InputStream inputStream, int size)
 			throws IOException {
 		byte[] bytes = new byte[size];
-		inputStream.read(bytes);
+        final DataInputStream dis = new DataInputStream(inputStream);
+        dis.readFully(bytes);
 		return bytes;
 	}
 }

@@ -70,12 +70,15 @@ import static com.notnoop.apns.internal.Utilities.*;
  */
 public class ApnsServiceBuilder {
     private static final String KEYSTORE_TYPE = "PKCS12";
-    private static final String KEY_ALGORITHM = "sunx509";
+    private static final String KEY_ALGORITHM = ((java.security.Security.getProperty("ssl.KeyManagerFactory.algorithm") == null)? "sunx509" : java.security.Security.getProperty("ssl.KeyManagerFactory.algorithm"));
 
     private SSLContext sslContext;
 
+    private int readTimeout = 0;
+    private int connectTimeout = 0;
+
     private String gatewayHost;
-    private int gatewaPort = -1;
+    private int gatewayPort = -1;
 
     private String feedbackHost;
     private int feedbackPort;
@@ -84,17 +87,21 @@ public class ApnsServiceBuilder {
     private boolean autoAdjustCacheLength = true;
     private ExecutorService executor = null;
 
-    private ReconnectPolicy reconnectPolicy = ReconnectPolicy.Provided.NEVER.newObject();
+    private ReconnectPolicy reconnectPolicy = ReconnectPolicy.Provided.EVERY_HALF_HOUR.newObject();
     private boolean isQueued = false;
+    private ThreadFactory queueThreadFactory = null;
     
     private boolean isBatched = false;
     private int batchWaitTimeInSec;
     private int batchMaxWaitTimeInSec;
-    private ThreadFactory batchThreadFactory;
+    private ThreadFactory batchThreadFactory = null;
     
     private ApnsDelegate delegate = ApnsDelegate.EMPTY;
     private Proxy proxy = null;
+    private String proxyUsername = null;
+    private String proxyPassword = null;
     private boolean errorDetection = true;
+    private ThreadFactory errorDetectionThreadFactory = null;
 
     /**
      * Constructs a new instance of {@code ApnsServiceBuilder}
@@ -114,7 +121,7 @@ public class ApnsServiceBuilder {
      * This library does not support password-less p12 certificates, due to a
      * Oracle Java library <a href="http://bugs.sun.com/bugdatabase/view_bug.do?bug_id=6415637">
      * Bug 6415637</a>.  There are three workarounds: use a password-protected
-     * certificate, use a different boot Java SDK implementation, or constract
+     * certificate, use a different boot Java SDK implementation, or construct
      * the `SSLContext` yourself!  Needless to say, the password-protected
      * certificate is most recommended option.
      *
@@ -177,11 +184,11 @@ public class ApnsServiceBuilder {
      * This library does not support password-less p12 certificates, due to a
      * Oracle Java library <a href="http://bugs.sun.com/bugdatabase/view_bug.do?bug_id=6415637">
      * Bug 6415637</a>.  There are three workarounds: use a password-protected
-     * certificate, use a different boot Java SDK implementation, or constract
+     * certificate, use a different boot Java SDK implementation, or construct
      * the `SSLContext` yourself!  Needless to say, the password-protected
      * certificate is most recommended option.
      *
-     * @param stream    the keystore 
+     * @param keyStore  the keystore
      * @param password  the password of the keystore
      * @return  this
      * @throws InvalidSSLConfig if stream is invalid Keystore
@@ -217,6 +224,28 @@ public class ApnsServiceBuilder {
         this.sslContext = sslContext;
         return this;
     }
+    
+    /**
+     * Specify the timeout value to be set in new setSoTimeout in created
+     * sockets, for both feedback and push connections, in milliseconds.
+     * @param readTimeout timeout value to be set in new setSoTimeout
+     * @return this
+     */
+    public ApnsServiceBuilder withReadTimeout(int readTimeout) {
+    	this.readTimeout = readTimeout;
+    	return this;
+    }
+
+    /**
+     * Specify the timeout value to use for connectionTimeout in created
+     * sockets, for both feedback and push connections, in milliseconds.
+     * @param connectTimeout timeout value to use for connectionTimeout
+     * @return this
+     */
+    public ApnsServiceBuilder withConnectTimeout(int connectTimeout) {
+    	this.connectTimeout = connectTimeout;
+    	return this;
+    }
 
     /**
      * Specify the gateway server for sending Apple iPhone
@@ -232,7 +261,7 @@ public class ApnsServiceBuilder {
      */
     public ApnsServiceBuilder withGatewayDestination(String host, int port) {
         this.gatewayHost = host;
-        this.gatewaPort = port;
+        this.gatewayPort = port;
         return this;
     }
 
@@ -316,7 +345,7 @@ public class ApnsServiceBuilder {
      * Specify if the notification cache should auto adjust.
      * Default is true
      * 
-     * @param autoAdjustCacheLength 
+     * @param autoAdjustCacheLength the notification cache should auto adjust.
      * @return this
      */
     public ApnsServiceBuilder withAutoAdjustCacheLength(boolean autoAdjustCacheLength) {
@@ -357,6 +386,26 @@ public class ApnsServiceBuilder {
     }
 
     /**
+     * Specify the proxy and the authentication parameters to be used
+     * to establish the connections to Apple Servers.
+     *
+     * <p>Read the <a href="http://java.sun.com/javase/6/docs/technotes/guides/net/proxies.html">
+     * Java Networking and Proxies</a> guide to understand the
+     * proxies complexity.
+     *
+     * @param proxy the proxy object to be used to create connections
+     * @param proxyUsername a String object representing the username of the proxy server
+     * @param proxyPassword a String object representing the password of the proxy server
+     * @return  this
+     */
+    public ApnsServiceBuilder withAuthProxy(Proxy proxy, String proxyUsername, String proxyPassword) {
+        this.proxy = proxy;
+        this.proxyUsername = proxyUsername;
+        this.proxyPassword = proxyPassword;
+        return this;
+    }
+    
+    /**
      * Specify the proxy to be used to establish the connections
      * to Apple Servers
      *
@@ -373,7 +422,7 @@ public class ApnsServiceBuilder {
     }
     
     /**
-     * Specity the number of notifications to cache for error purposes.
+     * Specify the number of notifications to cache for error purposes.
      * Default is 100
      * 
      * @param cacheLength  Number of notifications to cache for error purposes
@@ -438,7 +487,20 @@ public class ApnsServiceBuilder {
      * @return  this
      */
     public ApnsServiceBuilder asQueued() {
+        return asQueued(Executors.defaultThreadFactory());
+    }
+    
+    /**
+     * Constructs a new thread with a processing queue to process
+     * notification requests.
+     *
+     * @param threadFactory
+     *            thread factory to use for queue processing
+     * @return  this
+     */
+    public ApnsServiceBuilder asQueued(ThreadFactory threadFactory) {
         this.isQueued = true;
+        this.queueThreadFactory = threadFactory;
         return this;
     }
     
@@ -467,13 +529,13 @@ public class ApnsServiceBuilder {
      *            maximum wait time for batch before executing
      */
     public ApnsServiceBuilder asBatched(int waitTimeInSec, int maxWaitTimeInSec) {
-        return asBatched(waitTimeInSec, maxWaitTimeInSec, Executors.defaultThreadFactory());
+        return asBatched(waitTimeInSec, maxWaitTimeInSec, null);
     }
     
     /**
      * Construct service which will process notification requests in batch.
      * After each request batch will wait <code>waitTimeInSec</code> for more request to come
-     * before executing but not more than <code>maxWaitTimeInSec></code>
+     * before executing but not more than <code>maxWaitTimeInSec</code>
      * 
      * Each batch creates new connection and close it after finished.
      * In case reconnect policy is specified it will be applied by batch processing. 
@@ -526,6 +588,20 @@ public class ApnsServiceBuilder {
     }
 
     /**
+     * Provide a custom source for threads used for monitoring connections.
+     *
+     * This setting is desired when the application must obtain threads from a
+     * controlled environment Google App Engine. 
+     * @param threadFactory
+     *            thread factory to use for error detection
+     * @return  this
+     */
+    public ApnsServiceBuilder withErrorDetectionThreadFactory(ThreadFactory threadFactory) {
+        this.errorDetectionThreadFactory = threadFactory;
+        return this;
+    }
+
+    /**
      * Returns a fully initialized instance of {@link ApnsService},
      * according to the requested settings.
      *
@@ -536,11 +612,12 @@ public class ApnsServiceBuilder {
         ApnsService service;
 
         SSLSocketFactory sslFactory = sslContext.getSocketFactory();
-        ApnsFeedbackConnection feedback = new ApnsFeedbackConnection(sslFactory, feedbackHost, feedbackPort, proxy);
+        ApnsFeedbackConnection feedback = new ApnsFeedbackConnection(sslFactory, feedbackHost, feedbackPort, proxy, readTimeout, connectTimeout, proxyUsername, proxyPassword);
 
-        ApnsConnection conn = new ApnsConnectionImpl(sslFactory, gatewayHost, 
-                gatewaPort, proxy, reconnectPolicy, 
-                delegate, errorDetection, cacheLength, autoAdjustCacheLength);
+        ApnsConnection conn = new ApnsConnectionImpl(sslFactory, gatewayHost,
+            gatewayPort, proxy, proxyUsername, proxyPassword, reconnectPolicy,
+                delegate, errorDetection, errorDetectionThreadFactory, cacheLength,
+                autoAdjustCacheLength, readTimeout, connectTimeout);
         if (pooledMax != 1) {
             conn = new ApnsPooledConnection(conn, pooledMax, executor);
         }
@@ -548,7 +625,7 @@ public class ApnsServiceBuilder {
         service = new ApnsServiceImpl(conn, feedback);
 
         if (isQueued) {
-            service = new QueuedApnsService(service);
+            service = new QueuedApnsService(service, queueThreadFactory);
         }
         
         if (isBatched) {
@@ -565,7 +642,7 @@ public class ApnsServiceBuilder {
             throw new IllegalStateException(
                     "SSL Certificates and attribute are not initialized\n"
                     + "Use .withCert() methods.");
-        if (gatewayHost == null || gatewaPort == -1)
+        if (gatewayHost == null || gatewayPort == -1)
             throw new IllegalStateException(
                     "The Destination APNS server is not stated\n"
                     + "Use .withDestination(), withSandboxDestination(), "
